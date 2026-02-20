@@ -83,7 +83,8 @@ fn exec_line(line: &str) -> Result<(), ExitCode> {
         "info"   => crate::usr::info::run(),
         "reboot" => cmd_reboot(),
         "halt"   => cmd_halt(),
-        "exit"   => return Err(ExitCode::Success),
+        "exit"    => return Err(ExitCode::Success),
+        "install" => cmd_install(),
         other    => {
             println!("Perintah tidak dikenal: '{}'. Ketik 'help' untuk daftar perintah.", other);
         }
@@ -107,6 +108,7 @@ fn cmd_help() {
     println!("  info           — informasi sistem");
     println!("  reboot         — restart sistem");
     println!("  halt           — matikan sistem");
+    println!("  install        — setup filesystem awal");
     println!("  exit           — keluar dari shell");
 }
 
@@ -171,6 +173,18 @@ fn cmd_write(args: &[&str]) {
     } else {
         println!("write: gagal menulis ke '{}'", full_path);
     }
+}
+
+fn cmd_install() {
+    if sys::fs::is_mounted() {
+        println!("Chilena sudah terinstall!");
+        return;
+    }
+    println!("Menginstall Chilena...");
+    sys::fs::mount_memfs();
+    sys::fs::write_file("/ini/boot.sh", b"shell\n").ok();
+    sys::fs::write_file("/ini/readme.txt", b"Selamat datang di Chilena!\n").ok();
+    println!("Install selesai! Ketik 'reboot' untuk restart.");
 }
 
 fn cmd_reboot() {

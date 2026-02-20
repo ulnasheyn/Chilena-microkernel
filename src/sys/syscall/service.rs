@@ -5,7 +5,7 @@
 
 use crate::api::process::ExitCode;
 use crate::sys;
-use crate::sys::fs::{Resource, FileIO};
+
 use crate::sys::process::Process;
 
 use alloc::vec;

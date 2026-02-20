@@ -108,7 +108,7 @@ irq_fn!(irq12, 12); irq_fn!(irq13, 13); irq_fn!(irq14, 14); irq_fn!(irq15, 15);
 // Exception handlers
 // ---------------------------------------------------------------------------
 
-extern "x86-interrupt" fn on_breakpoint(frame: InterruptStackFrame) {
+extern "x86-interrupt" fn on_breakpoint(_frame: InterruptStackFrame) {
     kdebug!("EXCEPTION: BREAKPOINT\n{:#?}", frame);
     panic!("breakpoint");
 }

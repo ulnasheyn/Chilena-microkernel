@@ -1,0 +1,7 @@
+cargo:rerun-if-changed=/workspaces/Chilena-microkernel/Cargo.toml
+cargo:rustc-link-search=native=/workspaces/Chilena-microkernel/target/bootimage/bootloader/x86_64-bootloader/release/build/bootloader-94a93188f13a782b/out
+cargo:rustc-link-lib=static=kernel_bin-chilena
+cargo:rerun-if-env-changed=KERNEL
+cargo:rerun-if-env-changed=KERNEL_MANIFEST
+cargo:rerun-if-changed=/workspaces/Chilena-microkernel/target/x86_64-chilena/release/chilena
+cargo:rerun-if-changed=build.rs

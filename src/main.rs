@@ -6,7 +6,7 @@ extern crate alloc;
 use bootloader::{entry_point, BootInfo};
 use core::panic::PanicInfo;
 use chilena::{sys, usr, hlt_loop};
-use chilena::{klog, kerror, kwarn, print, println};
+use chilena::{kerror, kwarn, print};
 
 entry_point!(kernel_main);
 

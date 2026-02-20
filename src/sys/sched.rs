@@ -6,18 +6,12 @@
 //!   - Simpan state proses lama, restore state proses baru
 //!   - Skip proses yang sedang WaitingSend / WaitingRecv
 
-use crate::sys::process::{
-    CURRENT_PID, NEXT_PID, PROC_TABLE,
-    save_registers, save_stack_frame,
-    CpuRegisters,
-};
+use crate::sys::process::{CURRENT_PID, NEXT_PID, PROC_TABLE};
 use crate::sys::ipc::BlockState;
 use crate::sys::gdt::GDT;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 use x86_64::registers::control::Cr3;
-use x86_64::structures::idt::InterruptStackFrameValue;
-use x86_64::VirtAddr;
 
 // ---------------------------------------------------------------------------
 // Interval scheduler — switch setiap N tick (1 tick = ~1ms)
