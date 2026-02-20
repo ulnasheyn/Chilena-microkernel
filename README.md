@@ -2,8 +2,7 @@
 
 A minimalist x86_64 kernel written in **Rust** (`no_std`).
 
-Inspired by the design philosophy of MOROS, but rewritten from scratch
-with a different architecture and approach.
+Inspired by the design philosophy of MOROS — particularly the "everything is a handle" concept, shared use of GDT, IDT, and int 0x80 syscall convention — but written from scratch with a different architecture. Chilena is not a fork or derivative of MOROS; every module, function, and structure was written independently. Compared to MOROS which features a disk-based filesystem, TCP/UDP networking, and built-in apps like a Lisp interpreter and chess, Chilena is intentionally minimal: an in-memory filesystem, 16 syscalls, and a lightweight shell. Think of MOROS as a mature kernel, and Chilena as a newborn — same foundation, different soul.
 
 ---
 
