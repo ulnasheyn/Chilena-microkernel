@@ -48,3 +48,24 @@ pub fn write(handle: usize, buf: &[u8]) -> isize {
         ) as isize
     }
 }
+
+pub fn send(target: usize, kind: u32, data: &[u8]) -> usize {
+    unsafe {
+        crate::sys::syscall::syscall4(
+            number::SEND,
+            target,
+            kind as usize,
+            data.as_ptr() as usize,
+            data.len(),
+        )
+    }
+}
+
+pub fn recv(out: &mut crate::sys::ipc::Message) -> usize {
+    unsafe {
+        crate::sys::syscall::syscall1(
+            number::RECV,
+            out as *mut _ as usize,
+        )
+    }
+}

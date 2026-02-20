@@ -8,6 +8,7 @@ use crate::sys;
 use crate::sys::console::Console;
 use crate::sys::fs::{Resource, Device};
 use crate::sys::gdt::GDT;
+use crate::sys::ipc::{BlockState, Message};
 use crate::sys::mem::{phys_mem_offset, with_frame_allocator};
 
 use alloc::boxed::Box;
@@ -277,6 +278,10 @@ pub struct Process {
     pub saved_regs:  CpuRegisters,
     pub data:        ProcData,
     pub allocator:   Arc<LockedHeap>,
+    /// Mailbox IPC — satu slot pesan masuk
+    pub mailbox:     Option<Message>,
+    /// Status blokir proses (Running / WaitingSend / WaitingRecv)
+    pub block:       BlockState,
 }
 
 impl Process {
@@ -292,6 +297,8 @@ impl Process {
             saved_regs:  CpuRegisters::default(),
             data:        ProcData::new("/", None),
             allocator:   Arc::new(LockedHeap::empty()),
+            mailbox:     None,
+            block:       BlockState::Running,
         }
     }
 
@@ -362,6 +369,8 @@ impl Process {
             stack_frame: parent.stack_frame,
             saved_regs:  parent.saved_regs,
             allocator:   Arc::new(LockedHeap::empty()),
+            mailbox:     None,
+            block:       BlockState::Running,
         };
 
         PROC_TABLE.write()[id] = Box::new(proc);

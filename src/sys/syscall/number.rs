@@ -18,3 +18,5 @@ pub const POLL:    usize = 0x0C; // Cek kesiapan handle
 pub const ALLOC:   usize = 0x0D; // Alokasi memori userspace
 pub const FREE:    usize = 0x0E; // Bebaskan memori userspace
 pub const KIND:    usize = 0x0F; // Tipe handle (file/device/socket)
+pub const SEND:    usize = 0x10; // Kirim pesan ke proses lain (block sampai diterima)
+pub const RECV:    usize = 0x11; // Tunggu pesan masuk (block sampai ada)

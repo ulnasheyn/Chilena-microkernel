@@ -96,6 +96,22 @@ pub fn dispatch(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
             service::kind(a1) as usize
         }
 
+        number::SEND => {
+            // a1 = target_pid, a2 = kind, a3 = data_ptr, a4 = data_len
+            let target  = a1;
+            let kind    = a2 as u32;
+            let ptr     = sys::process::resolve_addr(a3 as u64);
+            let len     = a4;
+            let data    = unsafe { core::slice::from_raw_parts(ptr, len) };
+            sys::ipc::send(target, kind, data)
+        }
+
+        number::RECV => {
+            // a1 = pointer ke Message struct di userspace
+            let out = unsafe { &mut *(sys::process::resolve_addr(a1 as u64) as *mut sys::ipc::Message) };
+            sys::ipc::recv(out)
+        }
+
         number::POLL => {
             let ptr  = sys::process::resolve_addr(a1 as u64) as *const _;
             let len  = a2;

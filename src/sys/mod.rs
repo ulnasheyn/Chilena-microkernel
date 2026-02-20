@@ -5,6 +5,7 @@ pub mod cpu;
 pub mod fs;
 pub mod gdt;
 pub mod idt;
+pub mod ipc;
 pub mod keyboard;
 pub mod mem;
 pub mod pic;
