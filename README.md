@@ -150,7 +150,7 @@ make image && qemu-system-x86_64 \
     -nographic
 ```
 
-> ⚠️ Toolchain `nightly-2025-09-01` is required. Different versions will cause build errors.
+> Toolchain `nightly-2025-09-01` is required. Different versions will cause build errors.
 
 ---
 
@@ -181,7 +181,7 @@ recv: pesan dari PID 0 > hello
 
 ## License
 
-MIT © Lynafyna
+MIT
 
 ---
 
