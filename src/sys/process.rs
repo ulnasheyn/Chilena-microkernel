@@ -179,8 +179,8 @@ pub fn save_registers(r: CpuRegisters) {
     PROC_TABLE.write()[current_pid()].saved_regs = r;
 }
 
-pub fn saved_stack_frame() -> InterruptStackFrameValue {
-    PROC_TABLE.read()[current_pid()].stack_frame.unwrap()
+pub fn saved_stack_frame() -> Option<InterruptStackFrameValue> {
+    PROC_TABLE.read()[current_pid()].stack_frame
 }
 
 pub fn save_stack_frame(sf: InterruptStackFrameValue) {
@@ -244,7 +244,9 @@ pub fn terminate() {
     let proc  = &table[current_pid()];
     let parent_id = proc.parent_id;
 
-    NEXT_PID.fetch_sub(1, Ordering::SeqCst);
+    if NEXT_PID.load(Ordering::SeqCst) > 0 {
+        NEXT_PID.fetch_sub(1, Ordering::SeqCst);
+    }
     set_pid(parent_id);
 
     proc.release_pages();

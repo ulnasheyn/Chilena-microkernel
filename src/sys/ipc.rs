@@ -74,18 +74,24 @@ pub fn send(target_pid: usize, kind: u32, data: &[u8]) -> usize {
     let msg = Message { sender: sender_pid, kind, data: payload };
 
     // Spin sampai mailbox target kosong, lalu deposit pesan
+    let mut retries = 0usize;
     loop {
         let mut table = PROC_TABLE.write();
 
         if table[target_pid].mailbox.is_none() {
             table[target_pid].mailbox   = Some(msg);
             table[target_pid].block     = BlockState::Running;
-            // Tandai sender kembali running
             table[sender_pid].block     = BlockState::Running;
             return 0;
         }
 
-        // Mailbox penuh — tandai sender sedang menunggu, lalu yield
+        // Timeout setelah 1000 retry — hindari freeze di single core
+        retries += 1;
+        if retries > 1000 {
+            table[sender_pid].block = BlockState::Running;
+            return usize::MAX;
+        }
+
         table[sender_pid].block = BlockState::WaitingSend { target: target_pid };
         drop(table);
         x86_64::instructions::hlt();

@@ -211,8 +211,9 @@ extern "sysv64" fn syscall_handler(
 
     // Restore konteks setelah proses exit
     if number == sys::syscall::number::EXIT {
-        let sf = sys::process::saved_stack_frame();
-        unsafe { frame.as_mut().write(sf); }
+        if let Some(sf) = sys::process::saved_stack_frame() {
+            unsafe { frame.as_mut().write(sf); }
+        }
         *regs = sys::process::saved_registers();
     }
 
