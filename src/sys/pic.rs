@@ -1,21 +1,21 @@
 //! PIC — Programmable Interrupt Controller (Intel 8259)
 //!
-//! Mengelola dua PIC yang dirangkai (master + slave) untuk
-//! menangani 16 IRQ hardware eksternal.
+//! Manages two chained PICs (master + slave) to handle
+//! 16 external hardware IRQs.
 
 use pic8259::ChainedPics;
 use spin::Mutex;
 
-/// Offset IRQ di IDT (IRQ 0-7 → vektor 32-39, IRQ 8-15 → vektor 40-47)
+/// IRQ offset in IDT (IRQ 0-7 → vectors 32-39, IRQ 8-15 → vectors 40-47)
 pub const PIC_MASTER_OFFSET: u8 = 32;
 pub const PIC_SLAVE_OFFSET:  u8 = PIC_MASTER_OFFSET + 8;
 
-/// Instance PIC global
+/// Global PIC instance
 pub static PICS: Mutex<ChainedPics> = Mutex::new(unsafe {
     ChainedPics::new(PIC_MASTER_OFFSET, PIC_SLAVE_OFFSET)
 });
 
-/// Inisialisasi PIC dan aktifkan interrupt CPU
+/// Initialize PIC and enable CPU interrupts
 pub fn init() {
     unsafe {
         PICS.lock().initialize();
@@ -23,7 +23,7 @@ pub fn init() {
     x86_64::instructions::interrupts::enable();
 }
 
-/// Konversi nomor IRQ ke vektor IDT
+/// Convert IRQ number to IDT vector
 pub fn irq_vector(irq: u8) -> u8 {
     PIC_MASTER_OFFSET + irq
 }

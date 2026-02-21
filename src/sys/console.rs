@@ -1,7 +1,7 @@
-//! Console — stdin buffer dan output kernel
+//! Console — stdin buffer and kernel output
 //!
-//! Menyediakan Console device yang mengimplementasi FileIO,
-//! sehingga stdout/stdin proses bisa diarahkan ke sini.
+//! Provides a Console device implementing FileIO,
+//! so process stdout/stdin can be redirected here.
 
 use crate::sys;
 use crate::sys::fs::{FileIO, PollEvent};
@@ -13,21 +13,21 @@ use spin::Mutex;
 use x86_64::instructions::interrupts;
 
 // ---------------------------------------------------------------------------
-// Global state konsol
+// Global console state
 // ---------------------------------------------------------------------------
 
 pub static STDIN:  Mutex<String> = Mutex::new(String::new());
 pub static ECHO:   AtomicBool    = AtomicBool::new(true);
 pub static RAW:    AtomicBool    = AtomicBool::new(false);
 
-// Karakter kontrol
+// Control characters
 pub const BS:  char = '\x08'; // Backspace
 pub const EOT: char = '\x04'; // End of Transmission (Ctrl+D)
 pub const ESC: char = '\x1B'; // Escape
 pub const ETX: char = '\x03'; // End of Text (Ctrl+C)
 
 // ---------------------------------------------------------------------------
-// Device Console — mengimplementasi FileIO
+// Console device — implements FileIO
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
@@ -69,10 +69,10 @@ impl FileIO for Console {
 }
 
 // ---------------------------------------------------------------------------
-// Fungsi output
+// Output functions
 // ---------------------------------------------------------------------------
 
-/// Cetak ke VGA dan serial sekaligus
+/// Print to both VGA and serial at the same time
 pub fn print_fmt(args: fmt::Arguments) {
     interrupts::without_interrupts(|| {
         use fmt::Write;
@@ -90,10 +90,10 @@ fn print_raw(s: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// Input keyboard / serial
+// Keyboard / serial input
 // ---------------------------------------------------------------------------
 
-/// Terima satu karakter dari keyboard atau serial
+/// Receive a single character from keyboard or serial
 pub fn input_char(c: char) {
     let mut stdin = STDIN.lock();
 
@@ -101,11 +101,11 @@ pub fn input_char(c: char) {
         BS => {
             if !stdin.is_empty() && ECHO.load(Ordering::SeqCst) {
                 stdin.pop();
-                print_raw("\x08 \x08"); // hapus karakter di layar
+                print_raw("\x08 \x08"); // erase character on screen
             }
         }
         ETX => {
-            // Ctrl+C — kosongkan buffer dan kirim sinyal
+            // Ctrl+C — clear buffer and send signal
             stdin.clear();
             if ECHO.load(Ordering::SeqCst) {
                 print_raw("^C\n");
@@ -122,7 +122,7 @@ pub fn input_char(c: char) {
     }
 }
 
-/// Baca satu karakter dari stdin (blocking)
+/// Read a single character from stdin (blocking)
 pub fn read_char() -> char {
     loop {
         x86_64::instructions::hlt();
@@ -134,7 +134,7 @@ pub fn read_char() -> char {
     }
 }
 
-/// Baca satu baris dari stdin (blocking, hingga newline)
+/// Read a line from stdin (blocking, until newline)
 pub fn read_line() -> String {
     loop {
         x86_64::instructions::hlt();

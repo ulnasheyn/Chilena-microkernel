@@ -1,9 +1,9 @@
-//! `sys::mem` — Manajemen memori Chilena
+//! `sys::mem` — Memory management for Chilena
 //!
-//! Terdiri dari:
-//!   - frame_alloc: alokasi frame fisik via bitmap
-//!   - paging: manipulasi page table x86_64
-//!   - heap: kernel heap global (linked_list_allocator)
+//! Consists of:
+//!   - frame_alloc: physical frame allocation via bitmap
+//!   - paging: x86_64 page table manipulation
+//!   - heap: global kernel heap (linked_list_allocator)
 
 mod bitmap;
 mod heap;
@@ -20,7 +20,7 @@ use x86_64::structures::paging::{OffsetPageTable, Translate};
 use x86_64::{PhysAddr, VirtAddr};
 
 // ---------------------------------------------------------------------------
-// Global state — diisi satu kali saat init
+// Global state — initialized once during boot
 // ---------------------------------------------------------------------------
 
 #[allow(static_mut_refs)]
@@ -31,11 +31,11 @@ static MEM_MAP:      Once<&MemoryMap>  = Once::new();
 static TOTAL_BYTES:  AtomicUsize       = AtomicUsize::new(0);
 
 // ---------------------------------------------------------------------------
-// Inisialisasi
+// Initialization
 // ---------------------------------------------------------------------------
 
 pub fn init(boot_info: &'static BootInfo) {
-    // Sementara mask keyboard agar tidak ganggu alokasi
+    // Temporarily mask keyboard to avoid interference during allocation
     sys::idt::set_irq_mask(1);
 
     let mut total = 0usize;
@@ -77,7 +77,7 @@ pub fn init(boot_info: &'static BootInfo) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper publik
+// Public helpers
 // ---------------------------------------------------------------------------
 
 pub fn phys_mem_offset() -> u64 {

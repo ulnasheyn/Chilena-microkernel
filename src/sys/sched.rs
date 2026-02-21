@@ -1,10 +1,10 @@
-//! Scheduler Chilena — Round-Robin Preemptive (Proper Context Switch)
+//! Scheduler for Chilena — Round-Robin Preemptive (Proper Context Switch)
 //!
-//! Cara kerja:
-//!   - IRQ 0 (timer) memanggil timer_handler via naked function
-//!   - Semua register disave ke stack lalu ke Process struct
-//!   - Round-robin pilih proses berikutnya yang Running
-//!   - Restore register proses tujuan via iretq
+//! How it works:
+//!   - IRQ 0 (timer) calls timer_handler via naked function
+//!   - All registers are saved to the stack then to the Process struct
+//!   - Round-robin selects the next Running process
+//!   - Registers of the target process are restored via iretq
 
 use crate::sys::process::{
     CURRENT_PID, NEXT_PID, PROC_TABLE,
@@ -18,16 +18,16 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use x86_64::registers::control::Cr3;
 
 // ---------------------------------------------------------------------------
-// Interval scheduler
+// Scheduler interval
 // ---------------------------------------------------------------------------
 
-/// Switch proses setiap 10ms (10 tick @ 1000Hz)
+/// Switch process every 10ms (10 ticks @ 1000Hz)
 const SCHED_INTERVAL: u64 = 10;
 
 static TICK: AtomicU64 = AtomicU64::new(0);
 
 // ---------------------------------------------------------------------------
-// tick() — dipanggil dari clk::on_tick setiap timer interrupt
+// tick() — called from clk::on_tick every timer interrupt
 // ---------------------------------------------------------------------------
 
 pub fn tick() {
@@ -65,10 +65,10 @@ pub fn tick() {
 }
 
 // ---------------------------------------------------------------------------
-// Proper context switch — save state proses lama, restore proses baru
+// Proper context switch — save old process state, restore new process
 // ---------------------------------------------------------------------------
 
-/// Dipanggil dari timer_irq_handler dengan frame + regs yang sudah disave
+/// Called from timer_handler with already-saved frame and regs
 pub fn schedule(
     frame: &mut x86_64::structures::idt::InterruptStackFrame,
     regs:  &mut CpuRegisters,
@@ -85,11 +85,11 @@ pub fn schedule(
 
     let cur = CURRENT_PID.load(Ordering::SeqCst);
 
-    // Simpan state proses sekarang
+    // Save current process state
     save_stack_frame(**frame);
     save_registers(*regs);
 
-    // Cari proses berikutnya
+    // Find next ready process
     let next = {
         let table = PROC_TABLE.read();
         let mut found = None;
@@ -107,7 +107,7 @@ pub fn schedule(
     if let Some(next_pid) = next {
         if next_pid == cur { return; }
 
-        // Load state proses tujuan
+        // Load target process state
         let (next_frame, next_regs, pt_frame) = {
             let table = PROC_TABLE.read();
             let p = &table[next_pid];
@@ -116,7 +116,7 @@ pub fn schedule(
 
         CURRENT_PID.store(next_pid, Ordering::SeqCst);
 
-        // Restore register proses tujuan
+        // Restore target process registers
         *regs = next_regs;
 
         // Restore stack frame (RIP, RSP, RFLAGS, CS, SS)
@@ -133,7 +133,7 @@ pub fn schedule(
 }
 
 // ---------------------------------------------------------------------------
-// Fallback switch_to — dipakai kalau belum ada saved frame
+// Fallback switch_to — used when no saved frame exists yet
 // ---------------------------------------------------------------------------
 
 fn switch_to(next_pid: usize) {

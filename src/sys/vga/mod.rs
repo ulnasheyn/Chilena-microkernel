@@ -1,6 +1,6 @@
-//! VGA Text Mode Driver — 80×25, 16 warna
+//! VGA Text Mode Driver — 80×25, 16 colors
 //!
-//! Menulis langsung ke framebuffer VGA di 0xB8000.
+//! Writes directly to the VGA framebuffer at 0xB8000.
 
 use core::fmt;
 use lazy_static::lazy_static;
@@ -9,7 +9,7 @@ use x86_64::instructions::interrupts;
 use x86_64::instructions::port::Port;
 
 // ---------------------------------------------------------------------------
-// Konstanta VGA
+// VGA constants
 // ---------------------------------------------------------------------------
 
 const VGA_ADDR: usize = 0xB8000;
@@ -141,10 +141,10 @@ impl VgaWriter {
         }
     }
 
-    /// Proses escape sequence ANSI minimal (warna, clear)
+    /// Process minimal ANSI escape sequences (color, clear)
     fn write_str_ansi(&mut self, s: &str) {
-        // Implementasi sederhana: teruskan apa adanya tanpa parsing ANSI
-        // (ANSI parsing opsional, bisa ditambahkan nanti)
+        // Simple implementation: pass through as-is without ANSI parsing
+        // (ANSI parsing is optional and can be added later)
         for byte in s.bytes() {
             self.write_byte(byte);
         }

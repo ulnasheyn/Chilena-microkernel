@@ -1,6 +1,6 @@
-//! `usr` — Program userspace bawaan Chilena
+//! `usr` — Built-in userspace programs for Chilena
 //!
-//! Semua program di sini berjalan di atas syscall API.
+//! All programs here run on top of the syscall API.
 
 pub mod shell;
 pub mod help;

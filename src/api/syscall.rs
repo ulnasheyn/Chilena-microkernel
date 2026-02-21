@@ -1,4 +1,4 @@
-//! Syscall API Chilena — wrappers ergonomis untuk userspace
+//! Syscall API for Chilena — ergonomic wrappers for userspace
 
 use crate::sys::syscall::number;
 use crate::api::process::ExitCode;

@@ -1,9 +1,9 @@
 //! IDT — Interrupt Descriptor Table
 //!
-//! Mendaftarkan handler untuk:
-//!   - Exception CPU (page fault, double fault, GPF, dll)
-//!   - IRQ hardware 0-15
-//!   - Syscall via int 0x80 (ring 3 accessible)
+//! Registers handlers for:
+//!   - CPU exceptions (page fault, double fault, GPF, etc.)
+//!   - Hardware IRQs 0-15
+//!   - Syscalls via int 0x80 (ring 3 accessible)
 
 use crate::sys;
 use crate::sys::mem::phys_mem_offset;
@@ -22,7 +22,7 @@ use x86_64::structures::paging::OffsetPageTable;
 use x86_64::VirtAddr;
 
 // ---------------------------------------------------------------------------
-// IRQ handler table — bisa diisi oleh driver
+// IRQ handler table — filled by drivers
 // ---------------------------------------------------------------------------
 
 fn noop_handler() {}
@@ -83,7 +83,7 @@ pub fn init() {
 }
 
 // ---------------------------------------------------------------------------
-// IRQ dispatch helper
+// IRQ dispatch helper macro
 // ---------------------------------------------------------------------------
 
 macro_rules! irq_fn {
@@ -99,7 +99,7 @@ macro_rules! irq_fn {
     };
 }
 
-// IRQ 0 (timer) — naked function untuk proper context save/restore
+// IRQ 0 (timer) — naked function for proper context save/restore
 #[unsafe(naked)]
 extern "x86-interrupt" fn irq0(_: InterruptStackFrame) {
     naked_asm!(
@@ -113,9 +113,9 @@ extern "x86-interrupt" fn irq0(_: InterruptStackFrame) {
         "push r9",
         "push r10",
         "push r11",
-        "mov rsi, rsp",       // arg2: pointer ke saved registers
-        "mov rdi, rsp",       // arg1: pointer ke interrupt frame
-        "add rdi, 9 * 8",     // frame ada di atas 9 register
+        "mov rsi, rsp",       // arg2: pointer to saved registers
+        "mov rdi, rsp",       // arg1: pointer to interrupt frame
+        "add rdi, 9 * 8",     // frame is above the 9 saved registers
         "call {handler}",
         "pop r11",
         "pop r10",
@@ -131,7 +131,7 @@ extern "x86-interrupt" fn irq0(_: InterruptStackFrame) {
     );
 }
 
-/// Handler timer — dipanggil dari irq0 naked function
+/// Timer handler — called from irq0 naked function
 extern "sysv64" fn timer_handler(
     _frame: &mut InterruptStackFrame,
     _regs:  &mut CpuRegisters,
@@ -154,7 +154,7 @@ irq_fn!(irq12, 12); irq_fn!(irq13, 13); irq_fn!(irq14, 14); irq_fn!(irq15, 15);
 // ---------------------------------------------------------------------------
 
 extern "x86-interrupt" fn on_breakpoint(_frame: InterruptStackFrame) {
-    kdebug!("EXCEPTION: BREAKPOINT\n{:#?}", frame);
+    kdebug!("EXCEPTION: BREAKPOINT\n{:#?}", _frame);
     panic!("breakpoint");
 }
 
@@ -185,23 +185,23 @@ extern "x86-interrupt" fn on_page_fault(
         OffsetPageTable::new(page_table, VirtAddr::new(phys_mem_offset()))
     };
 
-    // Coba alokasi halaman on-demand jika proses menulis
+    // Try on-demand page allocation if process is writing
     if error.contains(PageFaultErrorCode::CAUSED_BY_WRITE) {
         if sys::mem::map_page(&mut mapper, fault_addr, 1).is_err() {
-            kerror!("Page fault: tidak bisa alokasi halaman di {:#X}", fault_addr);
+            kerror!("Page fault: could not allocate page at {:#X}", fault_addr);
             panic!("page fault");
         }
     } else {
-        kerror!("Page fault di {:#X} (flags: {:?})", fault_addr, error);
+        kerror!("Page fault at {:#X} (flags: {:?})", fault_addr, error);
         panic!("page fault");
     }
 }
 
 // ---------------------------------------------------------------------------
-// Syscall entry (naked function — simpan semua scratch register)
+// Syscall entry (naked function — save all scratch registers)
 // ---------------------------------------------------------------------------
 
-/// Entry point syscall: simpan register, panggil dispatcher, restore
+/// Syscall entry point: save registers, call dispatcher, restore
 #[unsafe(naked)]
 extern "sysv64" fn syscall_entry() -> ! {
     naked_asm!(
@@ -215,10 +215,10 @@ extern "sysv64" fn syscall_entry() -> ! {
         "push r9",
         "push r10",
         "push r11",
-        "mov rsi, rsp",        // arg2: pointer ke saved registers
-        "mov rdi, rsp",        // arg1: pointer ke interrupt frame
-        "add rdi, 9 * 8",      // interrupt frame ada di atas 9 register
-        "sti",                 // boleh interrupt selama eksekusi syscall
+        "mov rsi, rsp",        // arg2: pointer to saved registers
+        "mov rdi, rsp",        // arg1: pointer to interrupt frame
+        "add rdi, 9 * 8",      // interrupt frame is above 9 registers
+        "sti",                 // allow interrupts during syscall execution
         "call {handler}",
         "cli",
         "pop r11",
@@ -235,7 +235,7 @@ extern "sysv64" fn syscall_entry() -> ! {
     );
 }
 
-/// Handler syscall — dipanggil dari syscall_entry
+/// Syscall handler — called from syscall_entry
 extern "sysv64" fn syscall_handler(
     frame: &mut InterruptStackFrame,
     regs:  &mut CpuRegisters,
@@ -246,7 +246,7 @@ extern "sysv64" fn syscall_handler(
     let a3 = regs.rdx;
     let a4 = regs.r8;
 
-    // Simpan konteks sebelum spawn proses baru
+    // Save context before spawning a new process
     if number == sys::syscall::number::SPAWN {
         sys::process::save_stack_frame(**frame);
         sys::process::save_registers(*regs);
@@ -254,7 +254,7 @@ extern "sysv64" fn syscall_handler(
 
     let result = sys::syscall::dispatch(number, a1, a2, a3, a4);
 
-    // Restore konteks setelah proses exit
+    // Restore context after process exit
     if number == sys::syscall::number::EXIT {
         if let Some(sf) = sys::process::saved_stack_frame() {
             unsafe { frame.as_mut().write(sf); }
@@ -269,7 +269,7 @@ extern "sysv64" fn syscall_handler(
 // IRQ management API
 // ---------------------------------------------------------------------------
 
-/// Daftarkan handler untuk IRQ tertentu
+/// Register a handler for a specific IRQ
 pub fn set_irq_handler(irq: u8, handler: fn()) {
     interrupts::without_interrupts(|| {
         IRQ_HANDLERS.lock()[irq as usize] = handler;
@@ -277,7 +277,7 @@ pub fn set_irq_handler(irq: u8, handler: fn()) {
     });
 }
 
-/// Masking IRQ (disable)
+/// Mask an IRQ (disable)
 pub fn set_irq_mask(irq: u8) {
     let mut port = irq_port(irq);
     unsafe {
@@ -286,7 +286,7 @@ pub fn set_irq_mask(irq: u8) {
     }
 }
 
-/// Unmask IRQ (enable)
+/// Unmask an IRQ (enable)
 pub fn clear_irq_mask(irq: u8) {
     let mut port = irq_port(irq);
     unsafe {
@@ -303,7 +303,7 @@ fn irq_line(irq: u8) -> u8 {
     if irq < 8 { irq } else { irq - 8 }
 }
 
-/// Triple fault → reboot via IDT kosong
+/// Triple fault → reboot via empty IDT
 static EMPTY_IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 
 pub fn trigger_reset() -> ! {

@@ -1,6 +1,6 @@
 //! Serial Port — UART 16550 (COM1 = 0x3F8)
 //!
-//! Digunakan sebagai output log awal dan debugging.
+//! Used for early boot logging and debugging output.
 
 use crate::sys;
 use core::fmt;
@@ -19,13 +19,13 @@ lazy_static! {
 }
 
 pub fn init() {
-    // Trigger inisialisasi lazy_static
+    // Trigger lazy_static initialization
     let _ = PORT.lock();
     // IRQ 4 = COM1
     sys::idt::set_irq_handler(4, on_interrupt);
 }
 
-/// Kirim string ke serial
+/// Write a string to the serial port
 pub fn write_str(s: &str) {
     interrupts::without_interrupts(|| {
         PORT.lock().write_str(s).ok();
@@ -43,7 +43,7 @@ fn on_interrupt() {
         PORT.lock().receive()
     });
 
-    if byte == 0xFF { return; } // abaikan byte invalid
+    if byte == 0xFF { return; } // ignore invalid byte
 
     let ch = match byte as char {
         '\r' => '\n',

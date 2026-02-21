@@ -1,7 +1,7 @@
-//! Syscall dispatcher Chilena
+//! Syscall dispatcher for Chilena
 //!
-//! Menerima nomor syscall dan argumen mentah (usize),
-//! konversi ke tipe yang tepat, lalu panggil service.
+//! Receives syscall number and raw arguments (usize),
+//! converts them to proper types, then calls the service layer.
 
 pub mod number;
 pub mod service;
@@ -19,7 +19,7 @@ fn raw_str(ptr: *mut u8, len: usize) -> &'static str {
     }
 }
 
-/// Terima syscall dari IDT handler dan teruskan ke service
+/// Receive syscall from IDT handler and forward to service layer
 pub fn dispatch(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
     match n {
         number::EXIT => {
@@ -107,7 +107,7 @@ pub fn dispatch(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
         }
 
         number::RECV => {
-            // a1 = pointer ke Message struct di userspace
+            // a1 = pointer to Message struct in userspace
             let out = unsafe { &mut *(sys::process::resolve_addr(a1 as u64) as *mut sys::ipc::Message) };
             sys::ipc::recv(out)
         }
@@ -129,14 +129,14 @@ pub fn dispatch(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
         }
 
         _ => {
-            kdebug!("syscall tidak dikenal: {:#X}", n);
+            kdebug!("unknown syscall: {:#X}", n);
             usize::MAX
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Fungsi helper syscall untuk userspace (dipakai dari api/syscall.rs)
+// Syscall helper functions for userspace (used from api/syscall.rs)
 // ---------------------------------------------------------------------------
 
 pub unsafe fn syscall0(n: usize) -> usize {
@@ -177,7 +177,7 @@ pub unsafe fn syscall4(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> 
     r
 }
 
-/// Macro shorthand: syscall!(NUM), syscall!(NUM, a1), dst
+/// Macro shorthand for syscalls
 #[macro_export]
 macro_rules! syscall {
     ($n:expr)                         => { $crate::sys::syscall::syscall0($n as usize) };

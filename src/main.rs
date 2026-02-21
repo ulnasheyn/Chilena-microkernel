@@ -24,9 +24,9 @@ fn boot_sequence() {
         usr::shell::run_script(boot_script).ok();
     } else {
         if sys::fs::is_mounted() {
-            kerror!("File boot '{}' tidak ditemukan", boot_script);
+            kerror!("Boot file '{}' not found", boot_script);
         } else {
-            kwarn!("Filesystem belum di-mount. Jalankan 'install' untuk setup.");
+            kwarn!("Filesystem not mounted. Run 'install' to set up.");
         }
         usr::shell::run_interactive().ok();
     }
@@ -35,7 +35,7 @@ fn boot_sequence() {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     if let Some(loc) = info.location() {
-        kerror!("PANIC di {}:{}:{}", loc.file(), loc.line(), loc.column());
+        kerror!("PANIC at {}:{}:{}", loc.file(), loc.line(), loc.column());
     } else {
         kerror!("PANIC: {}", info);
     }

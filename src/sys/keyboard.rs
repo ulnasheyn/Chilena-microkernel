@@ -1,7 +1,7 @@
-//! Keyboard — Driver PS/2 via IRQ 1
+//! Keyboard — PS/2 driver via IRQ 1
 //!
-//! Menerjemahkan scan code ke karakter Unicode
-//! dan memasukkannya ke buffer stdin konsol.
+//! Translates scan codes to Unicode characters
+//! and pushes them into the console stdin buffer.
 
 use crate::sys;
 use lazy_static::lazy_static;

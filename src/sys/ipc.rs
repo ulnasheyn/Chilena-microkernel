@@ -1,27 +1,27 @@
-//! IPC — Inter-Process Communication Chilena
+//! IPC — Inter-Process Communication for Chilena
 //!
-//! Implementasi synchronous message passing:
-//!   - Sender block sampai receiver membaca pesan
-//!   - Fixed-size payload 64 byte (cukup untuk pointer + length kalau perlu data besar)
-//!   - Satu mailbox slot per proses (simple, no heap allocation)
+//! Implements synchronous message passing:
+//!   - Sender blocks until receiver reads the message
+//!   - Fixed-size 64-byte payload (enough for pointer + length for larger data)
+//!   - Single mailbox slot per process (simple, no heap allocation)
 
 use crate::sys::process::{current_pid, PROC_TABLE};
 
 // ---------------------------------------------------------------------------
-// Struktur pesan
+// Message structure
 // ---------------------------------------------------------------------------
 
-/// Ukuran payload pesan dalam byte
+/// Message payload size in bytes
 pub const MSG_PAYLOAD: usize = 64;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct Message {
-    /// PID pengirim
+    /// Sender PID
     pub sender:  usize,
-    /// Tipe pesan — bebas didefinisikan userspace
+    /// Message type — freely defined by userspace
     pub kind:    u32,
-    /// Payload fixed-size, bisa berisi data kecil atau pointer + length
+    /// Fixed-size payload, can hold small data or a pointer + length
     pub data:    [u8; MSG_PAYLOAD],
 }
 
@@ -36,29 +36,29 @@ impl Message {
 }
 
 // ---------------------------------------------------------------------------
-// Status blokir proses
+// Process block state
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BlockState {
-    /// Proses berjalan normal
+    /// Process is running normally
     Running,
-    /// Menunggu mailbox target kosong (sedang SEND)
+    /// Waiting for target mailbox to be empty (during SEND)
     WaitingSend { target: usize },
-    /// Menunggu pesan masuk (sedang RECV)
+    /// Waiting for incoming message (during RECV)
     WaitingRecv,
 }
 
 // ---------------------------------------------------------------------------
-// send — kirim pesan ke proses target (synchronous, blocking)
+// send — send a message to a target process (synchronous, blocking)
 // ---------------------------------------------------------------------------
 
-/// Kirim pesan ke `target_pid`.
-/// Return: 0 = sukses, usize::MAX = error (PID tidak valid)
+/// Send a message to `target_pid`.
+/// Returns: 0 = success, usize::MAX = error (invalid PID)
 pub fn send(target_pid: usize, kind: u32, data: &[u8]) -> usize {
     let sender_pid = current_pid();
 
-    // Validasi target
+    // Validate target
     {
         let table = PROC_TABLE.read();
         if target_pid >= table.len() || table[target_pid].id == 0 && target_pid != 0 {
@@ -72,7 +72,7 @@ pub fn send(target_pid: usize, kind: u32, data: &[u8]) -> usize {
 
     let msg = Message { sender: sender_pid, kind, data: payload };
 
-    // Spin sampai mailbox target kosong, lalu deposit pesan
+    // Spin until target mailbox is empty, then deposit message
     let mut retries = 0usize;
     loop {
         let mut table = PROC_TABLE.write();
@@ -84,7 +84,7 @@ pub fn send(target_pid: usize, kind: u32, data: &[u8]) -> usize {
             return 0;
         }
 
-        // Timeout setelah 1000 retry — hindari freeze di single core
+        // Timeout after 1000 retries — avoid freeze on single core
         retries += 1;
         if retries > 1000 {
             table[sender_pid].block = BlockState::Running;
@@ -98,11 +98,11 @@ pub fn send(target_pid: usize, kind: u32, data: &[u8]) -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// recv — tunggu pesan masuk (blocking)
+// recv — wait for incoming message (blocking)
 // ---------------------------------------------------------------------------
 
-/// Tunggu dan ambil pesan dari mailbox proses ini.
-/// Menulis pesan ke `out`, return: 0 = sukses
+/// Wait and take a message from this process's mailbox.
+/// Writes message to `out`, returns: 0 = success
 pub fn recv(out: &mut Message) -> usize {
     let pid = current_pid();
 
@@ -114,7 +114,7 @@ pub fn recv(out: &mut Message) -> usize {
                 *out = msg;
                 return 0;
             }
-            // Mailbox kosong — tandai sedang menunggu
+            // Mailbox empty — mark as waiting
             table[pid].block = BlockState::WaitingRecv;
         }
         x86_64::instructions::hlt();

@@ -1,7 +1,7 @@
-//! Process Manager Chilena
+//! Process Manager for Chilena
 //!
-//! Mengelola tabel proses, handle I/O, context switch,
-//! dan loading ELF binary ke memori userspace.
+//! Manages the process table, I/O handles, context switching,
+//! and loading ELF binaries into userspace memory.
 
 use crate::api::process::ExitCode;
 use crate::sys;
@@ -31,7 +31,7 @@ use x86_64::structures::paging::{
 use x86_64::VirtAddr;
 
 // ---------------------------------------------------------------------------
-// Konstanta
+// Constants
 // ---------------------------------------------------------------------------
 
 const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
@@ -39,16 +39,16 @@ const BIN_MAGIC: [u8; 4] = [0x7F, b'C', b'H', b'N']; // Chilena flat binary
 
 pub const MAX_HANDLES:  usize = 64;
 pub const MAX_PROCS:    usize = 8;
-pub const MAX_PROC_MEM: usize = 10 << 20; // 10 MB per proses
+pub const MAX_PROC_MEM: usize = 10 << 20; // 10 MB per process
 
-/// Alamat awal ruang user (harus di atas kernel)
+/// Start address of userspace (must be above kernel)
 const USER_BASE: u64 = 0x0080_0000;
 
 // ---------------------------------------------------------------------------
-// State global
+// Global state
 // ---------------------------------------------------------------------------
 
-static PROC_CODE_BASE: AtomicU64   = AtomicU64::new(0);
+static PROC_CODE_BASE: AtomicU64    = AtomicU64::new(0);
 pub static CURRENT_PID: AtomicUsize = AtomicUsize::new(0);
 pub static NEXT_PID:    AtomicUsize = AtomicUsize::new(1);
 
@@ -81,7 +81,7 @@ pub struct CpuRegisters {
 }
 
 // ---------------------------------------------------------------------------
-// Data proses (env, cwd, handles)
+// Process data (env, cwd, handles)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
@@ -112,7 +112,7 @@ impl ProcData {
 }
 
 // ---------------------------------------------------------------------------
-// API proses — akses state proses aktif
+// Process API — access current process state
 // ---------------------------------------------------------------------------
 
 pub fn current_pid() -> usize       { CURRENT_PID.load(Ordering::SeqCst) }
@@ -167,7 +167,7 @@ pub fn free_handle(h: usize) {
 }
 
 // ---------------------------------------------------------------------------
-// Saved register & stack frame (untuk context switch spawn/exit)
+// Saved registers & stack frame (for spawn/exit context switch)
 // ---------------------------------------------------------------------------
 
 pub fn saved_registers() -> CpuRegisters {
@@ -187,14 +187,14 @@ pub fn save_stack_frame(sf: InterruptStackFrameValue) {
 }
 
 // ---------------------------------------------------------------------------
-// Memori address helper
+// Memory address helpers
 // ---------------------------------------------------------------------------
 
 pub fn code_base() -> u64 {
     PROC_TABLE.read()[current_pid()].code_base
 }
 
-/// Konversi pointer userspace (mungkin relatif) ke alamat absolut kernel
+/// Convert a userspace pointer (possibly relative) to an absolute kernel address
 pub fn resolve_addr(addr: u64) -> *mut u8 {
     let base = code_base();
     if addr < base { (base + addr) as *mut u8 } else { addr as *mut u8 }
@@ -205,7 +205,7 @@ pub fn is_user_addr(addr: u64) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Alokasi memori per-proses
+// Per-process memory allocation
 // ---------------------------------------------------------------------------
 
 pub unsafe fn user_alloc(layout: Layout) -> *mut u8 {
@@ -223,7 +223,7 @@ pub unsafe fn user_free(ptr: *mut u8, layout: Layout) {
 }
 
 // ---------------------------------------------------------------------------
-// Page table per-proses
+// Per-process page table
 // ---------------------------------------------------------------------------
 
 unsafe fn current_page_table_frame() -> PhysFrame {
@@ -235,7 +235,7 @@ pub unsafe fn page_table() -> &'static mut PageTable {
 }
 
 // ---------------------------------------------------------------------------
-// Terminasi proses
+// Process termination
 // ---------------------------------------------------------------------------
 
 pub fn terminate() {
@@ -264,7 +264,7 @@ pub fn power_off_hook() {
 }
 
 // ---------------------------------------------------------------------------
-// Struct Process
+// Process struct
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -279,9 +279,9 @@ pub struct Process {
     pub saved_regs:  CpuRegisters,
     pub data:        ProcData,
     pub allocator:   Arc<LockedHeap>,
-    /// Mailbox IPC — satu slot pesan masuk
+    /// IPC mailbox — single incoming message slot
     pub mailbox:     Option<Message>,
-    /// Status blokir proses (Running / WaitingSend / WaitingRecv)
+    /// Process block state (Running / WaitingSend / WaitingRecv)
     pub block:       BlockState,
 }
 
@@ -317,15 +317,15 @@ impl Process {
             return Err(());
         }
 
-        // Alokasi frame untuk page table proses baru
+        // Allocate frame for new process page table
         let pt_frame = with_frame_allocator(|fa| {
-            fa.allocate_frame().expect("tidak bisa alokasi frame untuk page table")
+            fa.allocate_frame().expect("could not allocate frame for page table")
         });
 
         let new_pt     = unsafe { sys::mem::create_page_table_from_frame(pt_frame) };
         let kernel_pt  = unsafe { sys::mem::active_page_table() };
 
-        // Salin seluruh page table kernel ke proses baru
+        // Copy entire kernel page table to new process
         for (dst, src) in new_pt.iter_mut().zip(kernel_pt.iter()) {
             *dst = src.clone();
         }
@@ -338,7 +338,7 @@ impl Process {
         let stack_base = code_base + MAX_PROC_MEM as u64 - 4096;
         let mut entry_point = 0u64;
 
-        // Load ELF atau flat binary
+        // Load ELF or flat binary
         if bin.get(0..4) == Some(&ELF_MAGIC) {
             if let Ok(obj) = object::File::parse(bin) {
                 entry_point = obj.entry();
@@ -384,7 +384,7 @@ impl Process {
             OffsetPageTable::new(pt, VirtAddr::new(phys_mem_offset()))
         };
 
-        // Salin argumen ke memori proses
+        // Copy arguments into process memory
         let args_base = self.code_base + (self.stack_base - self.code_base) / 2;
         sys::mem::map_page(&mut mapper, args_base, 1).expect("args alloc");
 
@@ -406,7 +406,7 @@ impl Process {
             }
         }
 
-        // Align ke pointer size
+        // Align to pointer size
         let align = core::mem::align_of::<&str>() as u64;
         cursor = (cursor + align - 1) & !(align - 1);
 

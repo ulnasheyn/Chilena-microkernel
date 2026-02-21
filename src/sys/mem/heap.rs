@@ -9,7 +9,7 @@ use x86_64::structures::paging::{
 use x86_64::VirtAddr;
 
 pub const HEAP_BASE: u64 = 0x4444_4444_0000;
-const MAX_HEAP: u64 = 4 << 20; // maksimal 4 MB heap
+const MAX_HEAP: u64 = 4 << 20; // max 4 MB heap
 
 #[global_allocator]
 static KERNEL_HEAP: LockedHeap = LockedHeap::empty();
@@ -17,7 +17,7 @@ static KERNEL_HEAP: LockedHeap = LockedHeap::empty();
 pub fn init_kernel_heap() -> Result<(), MapToError<Size4KiB>> {
     let mapper = super::mapper();
 
-    // Batasi heap maksimal 4 MB
+    // Limit heap to 4 MB maximum
     let total = super::total_memory() as u64;
     let heap_size = (total / 2).min(MAX_HEAP);
     let heap_start = VirtAddr::new(HEAP_BASE);

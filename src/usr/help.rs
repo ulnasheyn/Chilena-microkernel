@@ -1,6 +1,6 @@
-//! help — tampilkan info singkat Chilena
+//! help — display brief Chilena information
 
 pub fn run() {
     println!("Chilena Kernel v{}", crate::VERSION);
-    println!("Kernel x86_64 minimalis berbasis Rust.");
+    println!("A minimal x86_64 kernel written in Rust.");
 }

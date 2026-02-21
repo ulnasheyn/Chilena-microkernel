@@ -1,4 +1,4 @@
-//! API Process Chilena
+//! Process API for Chilena
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(usize)]
@@ -28,7 +28,7 @@ impl From<ExitCode> for usize {
     fn from(e: ExitCode) -> usize { e as usize }
 }
 
-/// Keluar dari proses aktif
+/// Exit the current process
 pub fn exit(code: ExitCode) -> ! {
     unsafe { crate::sys::syscall::syscall1(crate::sys::syscall::number::EXIT, code as usize); }
     loop { x86_64::instructions::hlt(); }

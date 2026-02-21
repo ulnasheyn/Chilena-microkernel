@@ -1,4 +1,4 @@
-//! CPU — Deteksi informasi prosesor via CPUID
+//! CPU — Processor information detection via CPUID
 
 use raw_cpuid::CpuId;
 

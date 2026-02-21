@@ -1,7 +1,7 @@
 //! GDT — Global Descriptor Table
 //!
-//! Mendefinisikan segmen memori kernel dan userspace,
-//! serta Task State Segment (TSS) untuk stack interrupt.
+//! Defines kernel and userspace memory segments,
+//! and the Task State Segment (TSS) for interrupt stacks.
 
 use core::ptr::addr_of;
 use lazy_static::lazy_static;
@@ -11,20 +11,20 @@ use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
 
-/// Ukuran stack untuk setiap IST entry (128 KB)
+/// Stack size for each IST entry (128 KB)
 const IST_STACK_SIZE: usize = 128 * 1024;
 
-/// Indeks IST untuk tiap jenis fault
+/// IST index for each fault type
 pub const DOUBLE_FAULT_IST:  u16 = 0;
 pub const PAGE_FAULT_IST:    u16 = 1;
 pub const GPF_IST:           u16 = 2;
 
 lazy_static! {
-    /// Task State Segment — menyimpan stack pointer untuk privilege switch
+    /// Task State Segment — holds stack pointer for privilege switch
     static ref TSS: TaskStateSegment = {
         let mut tss = TaskStateSegment::new();
 
-        // Stack ring-0 untuk privilege transition (userspace → kernel)
+        // Ring-0 stack for privilege transition (userspace → kernel)
         tss.privilege_stack_table[0] = {
             static mut STACK: [u8; IST_STACK_SIZE] = [0; IST_STACK_SIZE];
             VirtAddr::from_ptr(addr_of!(STACK)) + IST_STACK_SIZE as u64
@@ -52,7 +52,7 @@ lazy_static! {
     };
 }
 
-/// Selector segmen yang dipakai oleh kernel dan userspace
+/// Segment selectors used by kernel and userspace
 pub struct SegmentSelectors {
     pub tss:       SegmentSelector,
     pub k_code:    SegmentSelector,
@@ -62,7 +62,7 @@ pub struct SegmentSelectors {
 }
 
 lazy_static! {
-    /// GDT dan selector segmen Chilena
+    /// Chilena GDT and segment selectors
     pub static ref GDT: (GlobalDescriptorTable, SegmentSelectors) = {
         let mut gdt = GlobalDescriptorTable::new();
 
@@ -76,7 +76,7 @@ lazy_static! {
     };
 }
 
-/// Inisialisasi GDT dan load ke prosesor
+/// Initialize GDT and load into processor
 pub fn init() {
     GDT.0.load();
     unsafe {

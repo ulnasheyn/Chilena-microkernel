@@ -1,9 +1,9 @@
-//! Filesystem Chilena
+//! Filesystem for Chilena
 //!
-//! Implementasi minimal: in-memory filesystem sederhana.
-//! Cukup untuk boot script, shell, dan userspace dasar.
+//! Minimal implementation: simple in-memory filesystem.
+//! Sufficient for boot scripts, shell, and basic userspace.
 //!
-//! Untuk filesystem disk penuh bisa dikembangkan kemudian.
+//! A full disk-based filesystem can be developed later.
 
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
@@ -11,17 +11,17 @@ use alloc::vec::Vec;
 use spin::RwLock;
 
 // ---------------------------------------------------------------------------
-// Trait I/O
+// I/O Traits
 // ---------------------------------------------------------------------------
 
-/// Tipe event untuk poll syscall
+/// Event type for poll syscall
 #[derive(Clone, Copy, Debug)]
 pub enum PollEvent {
     Read,
     Write,
 }
 
-/// Semua "file" atau "device" harus mengimplementasi trait ini
+/// All "files" or "devices" must implement this trait
 pub trait FileIO: Send + Sync {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()>;
     fn write(&mut self, buf: &[u8])    -> Result<usize, ()>;
@@ -116,7 +116,7 @@ impl Resource {
     }
 }
 
-// Untuk handle table
+// File handle type alias
 pub type FileHandle = Resource;
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ lazy_static::lazy_static! {
 }
 
 // ---------------------------------------------------------------------------
-// API Filesystem publik
+// Public filesystem API
 // ---------------------------------------------------------------------------
 
 pub fn is_mounted() -> bool {
@@ -155,7 +155,7 @@ pub fn exists(path: &str) -> bool {
 }
 
 pub fn canonicalize(path: &str) -> Result<String, ()> {
-    // Implementasi sederhana: normalisasi slash
+    // Simple implementation: normalize slashes
     let canonical = if path.starts_with('/') {
         path.to_string()
     } else {
@@ -194,11 +194,11 @@ pub fn remove(path: &str) -> Result<(), ()> {
     VFS.write().remove(path).map(|_| ()).ok_or(())
 }
 
-// Dipakai di sys::mem::init alias
+/// Called during sys::mem::init
 pub fn init() {
     mount_memfs();
 
-    // Tulis boot script default jika belum ada
+    // Write default boot script if it doesn't exist
     if !exists("/ini/boot.sh") {
         write_file("/ini/boot.sh", b"shell\n").ok();
     }

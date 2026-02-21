@@ -1,7 +1,7 @@
 //! Bitmap Frame Allocator
 //!
-//! Melacak frame fisik yang bebas/terpakai menggunakan bitmap 64-bit.
-//! Setiap bit mewakili satu frame 4 KB.
+//! Tracks free/used physical frames using a 64-bit bitmap.
+//! Each bit represents one 4 KB frame.
 
 use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
 use bit_field::BitField;
@@ -11,7 +11,7 @@ use x86_64::structures::paging::{FrameAllocator, FrameDeallocator, PhysFrame, Si
 use x86_64::PhysAddr;
 
 // ---------------------------------------------------------------------------
-// Struktur region fisik yang bisa dipakai
+// Usable physical memory region
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -57,7 +57,7 @@ pub struct BitmapAllocator {
 
 impl BitmapAllocator {
     pub fn build(memory_map: &'static MemoryMap) -> Self {
-        // Hitung total frame yang bisa dipakai
+        // Count total usable frames
         let total_frames: usize = memory_map.iter()
             .filter(|r| r.region_type == MemoryRegionType::Usable)
             .map(|r| ((r.range.end_addr() - r.range.start_addr()) / 4096) as usize)
@@ -84,7 +84,7 @@ impl BitmapAllocator {
             let rend   = region.range.end_addr();
             let rsize  = (rend - rstart) as usize;
 
-            // Tempatkan bitmap di region pertama yang cukup besar
+            // Place bitmap in the first region large enough
             let (usable_start, usable_end) = if !bitmap_placed && rsize >= bitmap_bytes {
                 bitmap_placed = true;
 
@@ -177,7 +177,7 @@ impl FrameDeallocator<Size4KiB> for BitmapAllocator {
 }
 
 // ---------------------------------------------------------------------------
-// Singleton global
+// Global singleton
 // ---------------------------------------------------------------------------
 
 static ALLOCATOR: Once<Mutex<BitmapAllocator>> = Once::new();

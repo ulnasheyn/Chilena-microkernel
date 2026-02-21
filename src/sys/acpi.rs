@@ -1,6 +1,6 @@
 //! ACPI — Power management (shutdown/reboot)
 //!
-//! Implementasi minimal: hanya mendukung power off via ACPI PM1a.
+//! Minimal implementation: only supports power off via ACPI PM1a.
 
 use x86_64::instructions::port::Port;
 
@@ -10,20 +10,20 @@ static mut SLP_TYPA: u16 = 0;
 const  SLP_EN:       u16 = 1 << 13;
 
 pub fn init() {
-    // Pada emulator QEMU, power off bisa dilakukan via port 0x604
-    // Untuk hardware nyata dibutuhkan parsing ACPI tables
-    // (implementasi lanjutan bisa menggunakan crate `acpi`)
+    // On QEMU, power off can be done via port 0x604
+    // For real hardware, ACPI table parsing is required
+    // (can be extended using the `acpi` crate)
     klog!("ACPI: init (minimal mode)");
 
     // QEMU power off magic
     unsafe { PM1A_CNT = 0x604; SLP_TYPA = 0; }
 }
 
-/// Matikan sistem
+/// Shut down the system
 pub fn power_off() -> ! {
     klog!("ACPI: power off...");
     unsafe {
-        // QEMU: tulis ke port 0x604
+        // QEMU: write to port 0x604
         let mut port: Port<u16> = Port::new(0x604);
         port.write(0x2000);
 

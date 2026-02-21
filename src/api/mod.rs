@@ -1,7 +1,7 @@
-//! `api` — Layer abstraksi antara kernel dan userspace
+//! `api` — Abstraction layer between kernel and userspace
 //!
-//! Program userspace harus menggunakan modul ini,
-//! bukan akses langsung ke `sys/`.
+//! Userspace programs should use this module,
+//! not direct access to `sys/`.
 
 pub mod console;
 pub mod process;

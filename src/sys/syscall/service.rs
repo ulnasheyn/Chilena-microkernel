@@ -1,7 +1,7 @@
-//! Implementasi layanan syscall Chilena
+//! Syscall service implementations for Chilena
 //!
-//! Setiap fungsi di sini adalah backend dari satu syscall.
-//! Dipanggil oleh dispatcher di mod.rs.
+//! Each function here is the backend for one syscall.
+//! Called by the dispatcher in mod.rs.
 
 use crate::api::process::ExitCode;
 use crate::sys;
@@ -12,7 +12,7 @@ use alloc::vec;
 use core::alloc::Layout;
 
 // ---------------------------------------------------------------------------
-// Proses
+// Process
 // ---------------------------------------------------------------------------
 
 pub fn exit(code: ExitCode) -> ExitCode {
@@ -36,7 +36,7 @@ pub fn spawn(path: &str, args_ptr: usize, args_len: usize) -> ExitCode {
         if let Ok(n) = file.read(&mut buf) {
             buf.truncate(n);
             match Process::spawn(&buf, args_ptr, args_len) {
-                Ok(_) => unreachable!(), // kernel berpindah ke proses anak
+                Ok(_) => unreachable!(), // kernel switches to child process
                 Err(e) => e,
             }
         } else {
@@ -54,7 +54,7 @@ pub fn halt(code: usize) -> usize {
             sys::process::terminate();
             sys::acpi::power_off();
         }
-        _ => kdebug!("HALT: kode tidak dikenal {:#X}", code),
+        _ => kdebug!("HALT: unknown code {:#X}", code),
     }
     0
 }
@@ -148,7 +148,7 @@ pub fn poll(handles: &[(usize, sys::fs::PollEvent)]) -> isize {
 }
 
 // ---------------------------------------------------------------------------
-// Memori userspace
+// Userspace memory
 // ---------------------------------------------------------------------------
 
 pub fn alloc_user(size: usize, align: usize) -> *mut u8 {

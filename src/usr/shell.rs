@@ -1,7 +1,7 @@
-//! Shell Chilena — command interpreter interaktif
+//! Chilena Shell — interactive command interpreter
 //!
-//! Mendukung perintah dasar: help, clear, echo, cd, ls, cat,
-//! exit, reboot, halt, dan info sistem.
+//! Supports basic commands: help, clear, echo, cd, ls, cat,
+//! exit, reboot, halt, info, install, send, recv.
 
 use crate::sys;
 use crate::api::process::ExitCode;
@@ -19,10 +19,10 @@ const BANNER: &str = r"
                                     
 ";
 
-/// Jalankan shell interaktif
+/// Run the interactive shell
 pub fn run_interactive() -> Result<(), ExitCode> {
     println!("{}", BANNER);
-    println!("Chilena v{} — ketik 'help' untuk bantuan.\n", crate::VERSION);
+    println!("Chilena v{} — type 'help' for commands.\n", crate::VERSION);
 
     loop {
         let prompt = build_prompt();
@@ -40,7 +40,7 @@ pub fn run_interactive() -> Result<(), ExitCode> {
     Ok(())
 }
 
-/// Jalankan skrip shell dari file
+/// Run a shell script from a file
 pub fn run_script(path: &str) -> Result<(), ExitCode> {
     if let Some(mut f) = sys::fs::open_file(path) {
         let mut buf = alloc::vec![0u8; f.size()];
@@ -73,51 +73,51 @@ fn exec_line(line: &str) -> Result<(), ExitCode> {
     let args = &parts[1..];
 
     match cmd {
-        "help"   => cmd_help(),
-        "clear"  => cmd_clear(),
-        "echo"   => cmd_echo(args),
-        "cd"     => cmd_cd(args),
-        "ls"     => cmd_ls(args),
-        "cat"    => cmd_cat(args),
-        "write"  => cmd_write(args),
-        "info"   => crate::usr::info::run(),
-        "reboot" => cmd_reboot(),
-        "halt"   => cmd_halt(),
+        "help"    => cmd_help(),
+        "clear"   => cmd_clear(),
+        "echo"    => cmd_echo(args),
+        "cd"      => cmd_cd(args),
+        "ls"      => cmd_ls(args),
+        "cat"     => cmd_cat(args),
+        "write"   => cmd_write(args),
+        "info"    => crate::usr::info::run(),
+        "reboot"  => cmd_reboot(),
+        "halt"    => cmd_halt(),
         "exit"    => return Err(ExitCode::Success),
         "install" => cmd_install(),
         "send"    => cmd_send(args),
         "recv"    => cmd_recv(),
-        other    => {
-            println!("Perintah tidak dikenal: '{}'. Ketik 'help' untuk daftar perintah.", other);
+        other     => {
+            println!("Unknown command: '{}'. Type 'help' for a list of commands.", other);
         }
     }
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Implementasi perintah
+// Command implementations
 // ---------------------------------------------------------------------------
 
 fn cmd_help() {
-    println!("Perintah yang tersedia:");
-    println!("  help           — tampilkan pesan ini");
-    println!("  clear          — bersihkan layar");
-    println!("  echo [teks]    — cetak teks");
-    println!("  cd [path]      — ganti direktori");
-    println!("  ls             — daftar file (in-memory)");
-    println!("  cat [file]     — tampilkan isi file");
-    println!("  write [f] [t]  — tulis teks ke file");
-    println!("  info           — informasi sistem");
-    println!("  reboot         — restart sistem");
-    println!("  halt           — matikan sistem");
-    println!("  install        — setup filesystem awal");
-    println!("  send <pid> <p> — kirim pesan ke proses");
-    println!("  recv           — tunggu dan tampilkan pesan masuk");
-    println!("  exit           — keluar dari shell");
+    println!("Available commands:");
+    println!("  help           — show this message");
+    println!("  clear          — clear the screen");
+    println!("  echo [text]    — print text");
+    println!("  cd [path]      — change directory");
+    println!("  ls             — list files (in-memory)");
+    println!("  cat [file]     — show file contents");
+    println!("  write [f] [t]  — write text to file");
+    println!("  info           — system information");
+    println!("  reboot         — restart the system");
+    println!("  halt           — shut down the system");
+    println!("  install        — setup initial filesystem");
+    println!("  send <pid> <m> — send message to process");
+    println!("  recv           — wait and display incoming message");
+    println!("  exit           — exit the shell");
 }
 
 fn cmd_clear() {
-    print!("\x1b[2J\x1b[H"); // ANSI: clear screen + cursor ke home
+    print!("\x1b[2J\x1b[H"); // ANSI: clear screen + cursor to home
 }
 
 fn cmd_echo(args: &[&str]) {
@@ -130,21 +130,20 @@ fn cmd_cd(args: &[&str]) {
 }
 
 fn cmd_ls(_args: &[&str]) {
-    // Tampilkan file yang ada di VFS (in-memory)
-    // Karena VFS adalah BTreeMap privat, kita tampilkan placeholder
-    println!("(filesystem in-memory — gunakan 'write' untuk buat file, 'cat' untuk baca)");
+    // Show files in VFS (in-memory)
+    println!("(in-memory filesystem — use 'write' to create files, 'cat' to read)");
     println!("  /ini/boot.sh");
 }
 
 fn cmd_cat(args: &[&str]) {
     let path = match args.first() {
         Some(p) => p,
-        None => { println!("cat: perlu nama file"); return; }
+        None => { println!("cat: filename required"); return; }
     };
 
     let full_path = match sys::fs::canonicalize(path) {
         Ok(p) => p,
-        Err(_) => { println!("cat: path tidak valid"); return; }
+        Err(_) => { println!("cat: invalid path"); return; }
     };
 
     if let Some(mut f) = sys::fs::open_file(&full_path) {
@@ -155,80 +154,80 @@ fn cmd_cat(args: &[&str]) {
             if !s.ends_with('\n') { println!(); }
         }
     } else {
-        println!("cat: file '{}' tidak ditemukan", path);
+        println!("cat: file '{}' not found", path);
     }
 }
 
 fn cmd_write(args: &[&str]) {
     if args.len() < 2 {
-        println!("write: perlu <file> <teks>");
+        println!("write: usage: write <file> <text>");
         return;
     }
     let path = args[0];
     let text = args[1..].join(" ");
     let full_path = match sys::fs::canonicalize(path) {
         Ok(p) => p,
-        Err(_) => { println!("write: path tidak valid"); return; }
+        Err(_) => { println!("write: invalid path"); return; }
     };
     let mut data = text.as_bytes().to_vec();
     data.push(b'\n');
     if sys::fs::write_file(&full_path, &data).is_ok() {
-        println!("Berhasil ditulis ke '{}'", full_path);
+        println!("Written to '{}'", full_path);
     } else {
-        println!("write: gagal menulis ke '{}'", full_path);
+        println!("write: failed to write to '{}'", full_path);
     }
 }
 
 fn cmd_send(args: &[&str]) {
     if args.len() < 2 {
-        println!("send: perlu <pid> <pesan>");
-        println!("contoh: send 1 hello");
+        println!("send: usage: send <pid> <message>");
+        println!("example: send 1 hello");
         return;
     }
     let pid: usize = match args[0].parse() {
         Ok(p) => p,
-        Err(_) => { println!("send: pid harus angka"); return; }
+        Err(_) => { println!("send: pid must be a number"); return; }
     };
-    let pesan = args[1..].join(" ");
-    let result = crate::api::syscall::send(pid, 0, pesan.as_bytes());
+    let message = args[1..].join(" ");
+    let result = crate::api::syscall::send(pid, 0, message.as_bytes());
     if result == usize::MAX {
-        println!("send: gagal kirim ke PID {}", pid);
+        println!("send: failed to send to PID {}", pid);
     } else {
-        println!("send: pesan terkirim ke PID {}", pid);
+        println!("send: message sent to PID {}", pid);
     }
 }
 
 fn cmd_recv() {
-    println!("recv: menunggu pesan...");
+    println!("recv: waiting for message...");
     let mut msg = crate::sys::ipc::Message::empty();
     let result = crate::api::syscall::recv(&mut msg);
     if result == 0 {
         let data = &msg.data[..msg.data.iter().position(|&b| b == 0).unwrap_or(64)];
         let text = alloc::string::String::from_utf8_lossy(data);
-        println!("recv: pesan dari PID {} > {}", msg.sender, text);
+        println!("recv: message from PID {} > {}", msg.sender, text);
     } else {
-        println!("recv: gagal menerima pesan");
+        println!("recv: failed to receive message");
     }
 }
 
 fn cmd_install() {
     if sys::fs::is_mounted() {
-        println!("Chilena sudah terinstall!");
+        println!("Chilena is already installed!");
         return;
     }
-    println!("Menginstall Chilena...");
+    println!("Installing Chilena...");
     sys::fs::mount_memfs();
     sys::fs::write_file("/ini/boot.sh", b"shell\n").ok();
-    sys::fs::write_file("/ini/readme.txt", b"Selamat datang di Chilena!\n").ok();
-    println!("Install selesai! Ketik 'reboot' untuk restart.");
+    sys::fs::write_file("/ini/readme.txt", b"Welcome to Chilena!\n").ok();
+    println!("Installation complete! Type 'reboot' to restart.");
 }
 
 fn cmd_reboot() {
-    println!("Melakukan reboot...");
+    println!("Rebooting...");
     unsafe { crate::sys::syscall::syscall1(crate::sys::syscall::number::HALT, 0xCAFE); }
 }
 
 fn cmd_halt() {
-    println!("Mematikan sistem...");
+    println!("Shutting down...");
     unsafe { crate::sys::syscall::syscall1(crate::sys::syscall::number::HALT, 0xDEAD); }
 }
