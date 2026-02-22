@@ -8,7 +8,6 @@ pub mod service;
 
 use crate::api::process::ExitCode;
 use crate::sys;
-use crate::sys::fs::FileInfo;
 
 use core::arch::asm;
 
@@ -117,10 +116,16 @@ pub fn dispatch(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
                 kdebug!("STAT: invalid path ptr");
                 return usize::MAX;
             }
+            // Validasi juga pointer output (a3) — ukuran FileInfo struct
+            let info_size = core::mem::size_of::<sys::fs::FileInfo>();
+            if !validate_user_ptr(a3, info_size) {
+                kdebug!("STAT: invalid output ptr {:#X}", a3);
+                return usize::MAX;
+            }
             let ptr  = sys::process::resolve_addr(a1 as u64);
             let len  = a2;
             let path = raw_str(ptr, len);
-            let info = unsafe { &mut *(a3 as *mut FileInfo) };
+            let info = unsafe { &mut *(sys::process::resolve_addr(a3 as u64) as *mut sys::fs::FileInfo) };
             service::stat(path, info) as usize
         }
 
@@ -165,6 +170,12 @@ pub fn dispatch(n: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> usize {
         }
 
         number::POLL => {
+            // Validasi pointer list sebelum akses
+            let entry_size = core::mem::size_of::<(usize, sys::fs::PollEvent)>();
+            if !validate_user_ptr(a1, a2.saturating_mul(entry_size)) {
+                kdebug!("POLL: invalid list ptr {:#X} len {}", a1, a2);
+                return usize::MAX;
+            }
             let ptr  = sys::process::resolve_addr(a1 as u64) as *const _;
             let len  = a2;
             let list = unsafe { core::slice::from_raw_parts(ptr, len) };

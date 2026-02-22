@@ -48,12 +48,15 @@ pub fn init(boot_info: &'static BootInfo) {
     sys::vga::init();
     sys::gdt::init();
     sys::idt::init();
+    // mem::init HARUS sebelum pic::init karena pic::init mengaktifkan interrupt (sti).
+    // Setelah interrupt aktif, timer bisa fire dan scheduler akan akses PROC_TABLE
+    // yang membutuhkan heap (Box::new). Jadi heap harus sudah siap dulu.
+    sys::mem::init(boot_info);
     sys::pic::init();
     sys::serial::init();
     sys::keyboard::init();
     sys::clk::init();
     klog!("SYS Chilena v{}", VERSION);
-    sys::mem::init(boot_info);
     sys::cpu::init();
     sys::acpi::init();
     klog!("RTC {}", sys::clk::date_string());

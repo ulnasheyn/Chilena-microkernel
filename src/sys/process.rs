@@ -52,6 +52,9 @@ const USER_BASE: u64 = 0x0080_0000;
 static PROC_CODE_BASE: AtomicU64    = AtomicU64::new(0);
 pub static CURRENT_PID: AtomicUsize = AtomicUsize::new(0);
 pub static NEXT_PID:    AtomicUsize = AtomicUsize::new(1);
+/// Jumlah proses aktif (tidak termasuk PID 0 / kernel idle).
+/// Ini terpisah dari NEXT_PID yang merupakan counter monotonik.
+pub static ACTIVE_PROCS: AtomicUsize = AtomicUsize::new(0);
 
 lazy_static! {
     pub static ref PROC_TABLE: RwLock<[Box<Process>; MAX_PROCS]> = {
@@ -283,40 +286,63 @@ pub unsafe fn page_table() -> &'static mut PageTable {
 
 pub fn terminate() {
     let pid = current_pid();
-    let (parent_id, pt_frame) = {
-        let table = PROC_TABLE.read();
-        let proc = &table[pid];
-        (proc.parent_id, proc.pt_frame)
-    };
 
-    // Release pages sebelum clear slot
-    {
+    // FIX BUG #4: Ambil SEMUA data yang dibutuhkan dalam satu lock,
+    // lalu lepas lock sebelum memanggil release_pages().
+    // Sebelumnya release_pages() dipanggil saat lock masih dipegang,
+    // dan clean_up() di dalam unmap_page bisa trigger page fault
+    // yang butuh PROC_TABLE.read() lagi → deadlock.
+    let (parent_id, pt_frame, code_base, stack_base) = {
         let table = PROC_TABLE.read();
-        table[pid].release_pages();
-    }
+        let proc  = &table[pid];
+        (proc.parent_id, proc.pt_frame, proc.code_base, proc.stack_base)
+    };
+    // Lock sudah dilepas di sini — aman untuk operasi yang bisa trigger page fault
+
+    // Release halaman proses TANPA memegang lock PROC_TABLE
+    release_process_pages(pt_frame, code_base, stack_base);
 
     // Clear slot — set id=0 menandakan slot kosong dan siap di-reuse
     {
         let mut table = PROC_TABLE.write();
-        table[pid] = Box::new(Process::new()); // reset ke default (id=0)
+        table[pid] = Box::new(Process::new());
     }
 
     // Update jumlah proses aktif
-    if NEXT_PID.load(Ordering::SeqCst) > 1 {
-        NEXT_PID.fetch_sub(1, Ordering::SeqCst);
-    }
+    ACTIVE_PROCS.fetch_sub(1, Ordering::SeqCst);
 
     set_pid(parent_id);
 
-    // Deallocate page table frame
+    // Deallocate page table frame dan switch ke page table parent
     unsafe {
         let (_, flags) = Cr3::read();
         with_frame_allocator(|fa| {
             fa.deallocate_frame(pt_frame);
         });
-        // Switch ke page table parent
+        // Ambil parent_pt dalam lock singkat yang tidak bisa deadlock
+        // (tidak ada operasi memory di dalamnya)
         let parent_pt = PROC_TABLE.read()[parent_id].pt_frame;
         Cr3::write(parent_pt, flags);
+    }
+}
+
+/// Bebaskan semua halaman milik proses tanpa memegang lock PROC_TABLE.
+/// Fungsi ini menerima data mentah sehingga tidak perlu akses tabel proses.
+fn release_process_pages(pt_frame: PhysFrame, code_base: u64, _stack_base: u64) {
+    let pt     = unsafe { sys::mem::create_page_table_from_frame(pt_frame) };
+    let mut mapper = unsafe {
+        OffsetPageTable::new(pt, VirtAddr::new(phys_mem_offset()))
+    };
+    sys::mem::unmap_page(&mut mapper, code_base, MAX_PROC_MEM);
+
+    // Juga cek apakah ada mapping di USER_BASE yang perlu dibersihkan
+    match mapper.translate(VirtAddr::new(USER_BASE)) {
+        TranslateResult::Mapped { flags, .. } => {
+            if flags.contains(PageTableFlags::USER_ACCESSIBLE) {
+                sys::mem::unmap_page(&mut mapper, USER_BASE, MAX_PROC_MEM);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -438,6 +464,7 @@ impl Process {
 
         PROC_TABLE.write()[slot] = Box::new(proc);
         NEXT_PID.fetch_add(1, Ordering::SeqCst);
+        ACTIVE_PROCS.fetch_add(1, Ordering::SeqCst);
         Ok(slot)
     }
 
@@ -447,14 +474,25 @@ impl Process {
             OffsetPageTable::new(pt, VirtAddr::new(phys_mem_offset()))
         };
 
-        // Copy arguments into process memory
-        let args_base = self.code_base + (self.stack_base - self.code_base) / 2;
-        sys::mem::map_page(&mut mapper, args_base, 1).expect("args alloc");
-
         let args: &[&str] = unsafe {
             let ptr = resolve_addr(args_ptr as u64) as usize;
             core::slice::from_raw_parts(ptr as *const &str, args_len)
         };
+
+        // FIX BUG #5: Hitung total ukuran yang dibutuhkan dulu sebelum map.
+        // Sebelumnya hanya map 1 byte (= 1 page = 4096 bytes) yang bisa overflow
+        // jika total panjang argumen + slice metadata > 4096 bytes.
+        let total_str_bytes: usize = args.iter().map(|a| a.len()).sum();
+        let align = core::mem::align_of::<&str>();
+        // str data + alignment padding + slice of &str (16 bytes per entry di x86_64)
+        let slice_meta_bytes = args_len * core::mem::size_of::<&str>();
+        let needed = total_str_bytes + align + slice_meta_bytes + align;
+        // Bulatkan ke atas ke kelipatan 4096, minimal 1 page
+        let pages_needed = (needed + 4095) / 4096;
+        let map_size = pages_needed * 4096;
+
+        let args_base = self.code_base + (self.stack_base - self.code_base) / 2;
+        sys::mem::map_page(&mut mapper, args_base, map_size).expect("args alloc");
 
         let mut cursor = args_base;
         let mut str_slices = alloc::vec::Vec::new();
@@ -469,7 +507,7 @@ impl Process {
             }
         }
 
-        // Align to pointer size
+        // Align ke pointer size
         let align = core::mem::align_of::<&str>() as u64;
         cursor = (cursor + align - 1) & !(align - 1);
 
@@ -480,7 +518,8 @@ impl Process {
             s
         };
 
-        let heap_start = cursor + 4096;
+        // Heap mulai setelah args region, dengan gap 4096 bytes
+        let heap_start = args_base + map_size as u64 + 4096;
         let heap_size  = ((self.stack_base - heap_start) / 2) as usize;
         unsafe {
             self.allocator.lock().init(heap_start as *mut u8, heap_size);
@@ -494,11 +533,11 @@ impl Process {
 
             asm!(
                 "cli",
-                "push {ss:r}",    // SS
-                "push {rsp:r}",   // RSP
-                "push 0x200",     // RFLAGS (IF=1)
-                "push {cs:r}",    // CS
-                "push {rip:r}",   // RIP
+                "push {ss:r}",
+                "push {rsp:r}",
+                "push 0x200",
+                "push {cs:r}",
+                "push {rip:r}",
                 "iretq",
                 ss  = in(reg) GDT.1.u_data.0,
                 rsp = in(reg) self.stack_base,
@@ -507,25 +546,6 @@ impl Process {
                 in("rdi") final_args.as_ptr(),
                 in("rsi") final_args.len(),
             );
-        }
-    }
-
-    fn mapper(&self) -> OffsetPageTable<'_> {
-        let pt = unsafe { sys::mem::create_page_table_from_frame(self.pt_frame) };
-        unsafe { OffsetPageTable::new(pt, VirtAddr::new(phys_mem_offset())) }
-    }
-
-    fn release_pages(&self) {
-        let mut mapper = self.mapper();
-        sys::mem::unmap_page(&mut mapper, self.code_base, MAX_PROC_MEM);
-
-        match mapper.translate(VirtAddr::new(USER_BASE)) {
-            TranslateResult::Mapped { flags, .. } => {
-                if flags.contains(PageTableFlags::USER_ACCESSIBLE) {
-                    sys::mem::unmap_page(&mut mapper, USER_BASE, MAX_PROC_MEM);
-                }
-            }
-            _ => {}
         }
     }
 

@@ -100,19 +100,19 @@ macro_rules! irq_fn {
 }
 
 // IRQ 0 (timer) — naked function untuk proper context save/restore
-// FIX: sekarang save semua register termasuk callee-saved (rbx, rbp, r12-r15)
+//
+// URUTAN PUSH harus cocok dengan layout struct CpuRegisters:
+//   struct CpuRegisters { r15, r14, r13, r12, rbp, rbx, r11, r10, r9, r8, rdi, rsi, rdx, rcx, rax }
+//   field pertama (r15) = offset 0 = [RSP+0] setelah semua push
+//   field terakhir (rax) = offset 112 = [RSP+112] setelah semua push
+//
+// Stack tumbuh ke bawah: push terakhir = alamat terendah = RSP saat ini.
+// Jadi r15 harus di-push TERAKHIR (agar di RSP+0), rax harus di-push PERTAMA.
 #[unsafe(naked)]
 extern "x86-interrupt" fn irq0(_: InterruptStackFrame) {
     naked_asm!(
         "cld",
-        // Push callee-saved (sesuai urutan CpuRegisters: r15..rbx)
-        "push rbx",
-        "push rbp",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-        // Push scratch registers
+        // Push scratch registers DULU (rax di offset tinggi)
         "push rax",
         "push rcx",
         "push rdx",
@@ -122,10 +122,24 @@ extern "x86-interrupt" fn irq0(_: InterruptStackFrame) {
         "push r9",
         "push r10",
         "push r11",
-        "mov rsi, rsp",       // arg2: pointer to saved registers (CpuRegisters)
-        "mov rdi, rsp",       // arg1: pointer to interrupt frame
-        "add rdi, 15 * 8",    // frame is above the 15 saved registers
+        // Push callee-saved TERAKHIR (r15 di offset 0 = RSP saat ini)
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "mov rsi, rsp",       // arg2: &mut CpuRegisters (RSP sekarang = &r15 = field pertama)
+        "mov rdi, rsp",       // arg1: akan di-adjust ke InterruptStackFrame
+        "add rdi, 15 * 8",    // frame ada di atas 15 register yang di-push (15 * 8 = 120 bytes)
         "call {handler}",
+        // Pop kebalikan dari push: r15 dulu (di RSP+0), rax terakhir
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
         "pop r11",
         "pop r10",
         "pop r9",
@@ -135,12 +149,6 @@ extern "x86-interrupt" fn irq0(_: InterruptStackFrame) {
         "pop rdx",
         "pop rcx",
         "pop rax",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop rbp",
-        "pop rbx",
         "iretq",
         handler = sym timer_handler,
     );
@@ -202,7 +210,12 @@ extern "x86-interrupt" fn on_page_fault(
 ) {
     let fault_addr = Cr2::read().as_u64();
 
-    let page_table = unsafe { sys::process::page_table() };
+    // FIX BUG #8: Gunakan active_page_table() yang membaca dari CR3 langsung,
+    // BUKAN sys::process::page_table() yang membaca PROC_TABLE[CURRENT_PID].pt_frame.
+    // Ada race window di scheduler antara Cr3::write() dan CURRENT_PID.store(),
+    // sehingga CURRENT_PID bisa menunjuk proses lama sementara CR3 sudah proses baru.
+    // CR3 selalu benar karena CPU tidak mengubahnya saat interrupt, jadi pakai itu.
+    let page_table = unsafe { sys::mem::active_page_table() };
     let mut mapper = unsafe {
         OffsetPageTable::new(page_table, VirtAddr::new(phys_mem_offset()))
     };
@@ -224,19 +237,14 @@ extern "x86-interrupt" fn on_page_fault(
 // ---------------------------------------------------------------------------
 
 /// Syscall entry point: save registers, call dispatcher, restore
-/// FIX: sekarang juga save/restore callee-saved registers
+//
+// Urutan push harus cocok dengan CpuRegisters struct:
+//   rax di-push pertama (offset 112), r15 di-push terakhir (offset 0)
 #[unsafe(naked)]
 extern "sysv64" fn syscall_entry() -> ! {
     naked_asm!(
         "cld",
-        // Push callee-saved
-        "push rbx",
-        "push rbp",
-        "push r12",
-        "push r13",
-        "push r14",
-        "push r15",
-        // Push scratch
+        // Push scratch registers dulu (offset tinggi)
         "push rax",
         "push rcx",
         "push rdx",
@@ -246,12 +254,26 @@ extern "sysv64" fn syscall_entry() -> ! {
         "push r9",
         "push r10",
         "push r11",
-        "mov rsi, rsp",        // arg2: pointer to CpuRegisters
-        "mov rdi, rsp",        // arg1: pointer to interrupt frame
-        "add rdi, 15 * 8",     // interrupt frame is above 15 registers
+        // Push callee-saved terakhir (r15 di RSP+0)
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "mov rsi, rsp",        // arg2: &mut CpuRegisters
+        "mov rdi, rsp",        // arg1: akan di-adjust ke InterruptStackFrame
+        "add rdi, 15 * 8",     // frame ada di atas 15 register
         "sti",                 // allow interrupts during syscall
         "call {handler}",
         "cli",
+        // Pop kebalikan push
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
         "pop r11",
         "pop r10",
         "pop r9",
@@ -261,12 +283,6 @@ extern "sysv64" fn syscall_entry() -> ! {
         "pop rdx",
         "pop rcx",
         "pop rax",
-        "pop r15",
-        "pop r14",
-        "pop r13",
-        "pop r12",
-        "pop rbp",
-        "pop rbx",
         "iretq",
         handler = sym syscall_handler,
     );
@@ -291,12 +307,21 @@ extern "sysv64" fn syscall_handler(
 
     let result = sys::syscall::dispatch(number, a1, a2, a3, a4);
 
-    // Restore context after process exit
+    // Restore context after process exit.
+    // FIX BUG #9: Setelah dispatch(EXIT) → terminate() sudah jalan,
+    // CURRENT_PID sekarang = parent_id.
+    // Kalau parent punya saved_stack_frame (sudah pernah di-save saat SPAWN) → restore.
+    // Kalau tidak ada (parent adalah kernel/PID 0 atau belum pernah spawn) →
+    // biarkan frame apa adanya, parent akan lanjut dari titik setelah syscall ini.
     if number == sys::syscall::number::EXIT {
+        // saved_stack_frame() sekarang membaca dari parent (CURRENT_PID sudah berubah)
         if let Some(sf) = sys::process::saved_stack_frame() {
             unsafe { frame.as_mut().write(sf); }
+            *regs = sys::process::saved_registers();
         }
-        *regs = sys::process::saved_registers();
+        // Jika None: parent tidak punya saved frame → tidak perlu restore,
+        // iretq akan kembali ke titik parent memanggil syscall SPAWN sebelumnya.
+        // regs.rax akan di-set ke result di bawah (exit code).
     }
 
     regs.rax = result;
